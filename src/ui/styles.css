@@ -119,9 +119,9 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
 .chart-canvas { display: block; max-width: 100%; border: 1px solid var(--grid); }
 .chart > canvas { width: 100%; }
 
-.legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; font: 0.72rem var(--mono); color: var(--faint); }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 10px; font: 0.72rem var(--mono); color: var(--faint); }
 .ramp {
-  flex: 1; height: 10px; border: 1px solid var(--line);
+  flex: 1; min-width: 80px; height: 10px; border: 1px solid var(--line);
   background: linear-gradient(90deg, rgb(var(--neg-rgb)), var(--paper) 50%, rgb(var(--pos-rgb)));
 }
 .hint { margin: 6px 0 0; font-size: 0.8rem; color: var(--faint); }
@@ -196,3 +196,11 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .why-card p { max-width: 78ch; color: var(--faint); margin: 0 0 10px; }
 .lab-cards { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); list-style: none; margin: 0; padding: 0; }
 .lab-cards .card p { margin: 0 0 14px; color: var(--faint); }
+
+.lab-card { display: flex; flex-direction: column; }
+.lab-card .eyebrow { margin: 0 0 6px; }
+.lab-card h2 { margin-bottom: 8px; }
+.lab-card .shows { font: 0.75rem var(--mono); color: var(--accent); margin: 0 0 16px; }
+.lab-card .btn { margin-top: auto; align-self: flex-start; text-decoration: none; display: inline-flex; align-items: center; }
+.home-note { margin-top: 22px; max-width: 70ch; }
+a.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }

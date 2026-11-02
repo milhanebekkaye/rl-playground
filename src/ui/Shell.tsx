@@ -54,18 +54,57 @@ export function Shell() {
   );
 }
 
+const LABS: { id: Exclude<LabId, 'home'>; title: string; kicker: string; body: string; shows: string }[] = [
+  {
+    id: 'gridworld',
+    title: 'Gridworld',
+    kicker: 'Tabular RL',
+    body: 'Draw a maze, then watch Q-learning, SARSA or Dyna-Q learn it. Heatmap, policy arrows, a Bellman inspector that shows each update with real numbers, and shareable links.',
+    shows: 'Q-values, TD error, on- vs off-policy, planning',
+  },
+  {
+    id: 'dopamine',
+    title: 'Dopamine lab',
+    kicker: 'Neuro-AI analogy',
+    body: 'A cue, then a reward. A TD(0) learner shows the prediction error moving from the reward to the cue, and dipping below zero when an expected reward is omitted.',
+    shows: 'Reward prediction error, as an analogy',
+  },
+  {
+    id: 'cartpole',
+    title: 'CartPole',
+    kicker: 'Deep RL from scratch',
+    body: 'A small neural network, with hand-written backprop and Adam, learns to balance a pole. Replay buffer, target network, live Q-values.',
+    shows: 'From a table to a network (DQN)',
+  },
+];
+
 function Home({ go }: { go: (id: LabId) => void }) {
   return (
     <div className="lab">
       <header className="lab-head">
         <p className="eyebrow">Reinforcement learning, in your browser</p>
         <h1>RL <em>Playground</em></h1>
-        <p className="lede">Small, honest experiments you can poke at. Pick a lab.</p>
+        <p className="lede">
+          Three small experiments that show how an agent learns from reward: you can edit the world, change the
+          hyperparameters and watch the learning signal as it happens. No backend and no ML library; the algorithms are
+          written in plain TypeScript and run in Web Workers.
+        </p>
       </header>
       <ul className="lab-cards">
-        <li className="card"><h2>Gridworld</h2><p>Draw a maze and watch Q-learning, SARSA and Dyna-Q learn it.</p><button className="btn primary" onClick={() => go('gridworld')}>Open</button></li>
-        <li className="card"><h2>Dopamine lab</h2><p>Prediction error moving from reward to cue.</p><button className="btn primary" onClick={() => go('dopamine')}>Open</button></li>
+        {LABS.map((l) => (
+          <li key={l.id} className="card lab-card">
+            <p className="eyebrow">{l.kicker}</p>
+            <h2>{l.title}</h2>
+            <p>{l.body}</p>
+            <p className="shows">{l.shows}</p>
+            <a className="btn primary" href={`#/${l.id}`} onClick={(e) => { e.preventDefault(); go(l.id); }}>Open {l.title}</a>
+          </li>
+        ))}
       </ul>
+      <p className="hint home-note">
+        Honest limits: these are teaching-scale demos. The dopamine lab is an analogy, not a brain model, and the CartPole
+        DQN is not guaranteed to stay at its peak (see the README for measured results).
+      </p>
     </div>
   );
 }

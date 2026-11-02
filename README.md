@@ -1,73 +1,93 @@
 # RL Playground
 
-A browser-only reinforcement learning playground. Draw a small grid world, press play, and watch a tabular agent (Q-learning or SARSA) learn to reach the goal. The board shows what the agent believes (value heatmap and policy arrows) while a learning curve shows whether it is actually getting better.
+Interactive reinforcement learning that runs entirely in the browser: no backend, no ML library. The algorithms are plain TypeScript, kept separate from the React UI, unit-tested, and run in Web Workers.
 
-Features:
+![Demo: Q-learning vs Dyna-Q on a maze, the dopamine lab, and the CartPole DQN](docs/demo.gif)
 
-- Grid editor: walls, start, goal and trap cells; editable goal, trap and step rewards, step limit, grid size.
-- Live training in a Web Worker: value heatmap, greedy-policy arrows, the current episode's trail, reward-per-episode curve.
-- **Compare mode:** Q-learning and SARSA train side by side on the same maze, hyperparameters, seed and step count, each with its own board and curve.
-- **TD-error view:** a per-cell heatmap of recent mean absolute TD error plus a TD-error trace.
-- **Shareable mazes:** the maze, rewards, hyperparameters and mode are encoded in the URL hash; "Copy link" gives you a link.
-- A built-in **Cliff walk** preset where the two algorithms learn visibly different paths.
+Stack: Vite, React, TypeScript, Canvas, Web Workers, Vitest. The build is static (a `vercel.json` is included but nothing is deployed from this repo).
 
-> Demo GIF: _placeholder, to be added (`docs/demo.gif`)._
+## The three labs
 
-Stack: Vite, React, TypeScript, Canvas, a Web Worker for training, Vitest for tests. No backend; the build is static and deploys as-is (for example to Vercel).
+**Gridworld.** Draw a grid (walls, start, goal, traps; editable rewards and step limit) and watch a tabular agent learn it.
+- Q-learning, SARSA and Dyna-Q, alone or side by side on the same maze, seed and hyperparameters.
+- Value heatmap (max Q per cell), greedy-policy arrows, the current episode's trail, a reward-per-episode curve.
+- TD-error view: per-cell running mean of the absolute TD error, plus a TD-error trace.
+- Bellman inspector (the *Inspect* tool): click a cell to see, per action, Q(s,a), the visit count and the arithmetic of the latest update, `r + gamma * max Q(s',.) - Q(s,a) = delta`, with the real numbers.
+- Dyna-Q planning-steps slider (0 is plain Q-learning) and a Cliff walk preset where Q-learning and SARSA learn different paths.
+- Shareable mazes: the maze, rewards, hyperparameters and mode live in the URL hash.
+
+**Dopamine lab.** A classical-conditioning task: a cue at step *c*, a reward at step *c + delay*, repeated for many trials, learned with TD(0) over a time-step state representation. A trials-by-time heatmap shows the TD error delta, line charts show delta at cue time and at reward time over trials, and there are controls for alpha, gamma, cue time, delay, reward probability and omitted-reward trials. The expected pattern emerges and is covered by unit tests: delta at the reward fades, delta at the cue grows, and an omitted reward gives a negative delta at the expected reward time. This is an analogy inspired by the reward-prediction-error account of dopamine neurons (Schultz, Dayan and Montague, 1997, *A neural substrate of prediction and reward*, Science). It is a minimal tabular learner, not a model of the brain.
+
+**CartPole.** A DQN with a small neural network (4-32-32-2), written from scratch: forward pass, backpropagation, Adam, Huber loss, replay buffer, target network and epsilon decay, all in TypeScript. It trains in a Web Worker while the UI shows the animated cart and pole, live Q-values of the two actions, the return curve, epsilon and buffer size, and a "Run greedy episode" button. It is the "from a table to a network" step: the same `r + gamma * max Q(s',.)` target, with a function approximator instead of a table. The physics are the standard CartPole ones (gravity 9.8, cart mass 1.0, pole mass 0.1, half-length 0.5, force 10, tau 0.02, 12 degree and 2.4 m limits, 500-step cap).
 
 ## How RL is shown here
 
-**State.** The agent's state is the grid cell it stands on, numbered `y * width + x`. Walls are never entered. The agent is the orange dot; its path during the current episode is the orange trail.
+**State.** In the gridworld the state is the cell the agent stands on (`y * width + x`); in CartPole it is four continuous numbers; in the dopamine lab it is the time step since the cue.
 
-**Action.** Four moves: up, right, down, left. Transitions are deterministic. Walking into a wall or the grid border leaves the agent where it is (and still costs a step).
+**Action.** Gridworld: up, right, down, left, deterministic, walls and borders block movement. CartPole: push left or right.
 
-**Reward.** Entering a goal cell gives the goal reward, entering a trap gives the trap reward, and every other step gives the step reward (a small negative number pushes the agent toward short paths). Goals and traps end the episode, and so does hitting the step limit. All four numbers are editable. The chart plots the total reward of each finished episode.
+**Reward.** Goal, trap and step rewards are editable in the gridworld; CartPole pays +1 per step the pole stays up; the dopamine task pays 1 at the reward time (with a chosen probability).
 
-**Q-value.** `Q(s, a)` is the agent's estimate of the total discounted reward it will collect if it takes action `a` in state `s` and then acts well. Each cell is coloured by `max_a Q(s, a)` (teal is positive, red is negative, normalised to the largest value on the board), and the arrow points along `argmax_a Q(s, a)`, the greedy policy. Cells the agent has not learned anything about yet show no arrow.
+**Q-value.** `Q(s, a)` estimates the discounted reward collected by taking `a` in `s` and acting well afterwards. The heatmap colours each cell by `max_a Q`, the arrows follow `argmax_a Q`. In CartPole a network outputs the two Q-values.
 
-**Epsilon-greedy.** To learn, the agent must try things. With probability epsilon it picks a random action; otherwise it takes the action with the highest Q-value (ties broken at random). Set epsilon to 0 once it has learned and the trail becomes the greedy path; set it to 1 and it wanders randomly.
+**Epsilon-greedy.** With probability epsilon the agent explores with a random action, otherwise it takes the greedy one (ties broken at random).
 
-**TD error.** After every step the agent compares what it just observed with what it predicted: `target = r + gamma * max_a' Q(s', a')` (just `r` if the next state is terminal), `TD error = target - Q(s, a)`, and then `Q(s, a) += alpha * TD error`. The "Last TD error" readout shows the most recent value; it shrinks toward zero as predictions become consistent. A timeout is not treated as terminal, so the agent still bootstraps from the next state when the step limit cuts an episode short. Alpha is the learning rate, gamma the discount.
+**TD error.** `delta = target - Q(s, a)`. The target is `r + gamma * max_a' Q(s', a')` for Q-learning, `r + gamma * Q(s', a')` for SARSA (the action actually taken next), and just `r` at a terminal state. A step-limit timeout is not treated as terminal, so the agent still bootstraps. The update is `Q += alpha * delta`.
 
-## Q-learning vs SARSA
+### Q-learning vs SARSA
+They differ in one term. Q-learning is off-policy: it learns the value of the greedy policy whatever it does while exploring. SARSA is on-policy: its values include the cost of its own random slips. In the Cliff walk preset (Sutton and Barto, example 6.6) with epsilon > 0, Q-learning learns the shortest path along the cliff edge while SARSA learns a longer, safer one; a unit test asserts this on several seeds.
 
-Both are temporal-difference control methods and differ in one term. Q-learning is off-policy: its target uses the best next action, `r + gamma * max_a' Q(s', a')`, so it learns the value of the greedy policy regardless of how it explores. SARSA is on-policy: its target uses the action it will actually take next, `r + gamma * Q(s', a')`, where `a'` comes from the epsilon-greedy policy, so its values include the cost of its own random slips.
+### Dyna-Q
+Dyna-Q adds a model of observed transitions and replays `n` random remembered transitions per real step. It reaches a good policy in fewer *real* episodes, at the price of more computation per step.
 
-The Cliff walk preset (Sutton and Barto, example 6.6) shows the difference. With a cliff of trap cells along the bottom edge and epsilon above zero, Q-learning learns the shortest path along the edge, which is optimal but gets it pushed off the cliff by exploratory moves during training. SARSA learns a longer path away from the edge, with better reward while it is still exploring. Lower epsilon toward zero and the two converge. The contrast is asserted by a unit test.
+### TD error and the dopamine analogy
+The TD error is the "surprise" that drives learning, large early and shrinking as predictions improve. Its time course in the dopamine lab parallels the shape of the classic dopamine-neuron recordings, which is why it is a popular analogy in neuro-AI. It remains an analogy.
 
-## The TD-error view
-
-Switch the board to "TD error" to colour each cell by an exponential moving average of the absolute TD error from updates made in that cell. Bright cells are where predictions are still being corrected: early on that is everywhere near the path, later mostly around traps, the goal and wherever exploration keeps surprising the agent. The chart shows the mean absolute TD error per batch of updates (line) and the mean signed error (dots) over recent training.
-
-The TD error plays the same role as the reward prediction error that neuroscientists have compared to dopamine activity (Schultz, Dayan and Montague, 1997): a surprise signal that drives learning and fades as predictions improve. It is an analogy for intuition, not a model of the brain.
-
-## Share links
-
-The hash is plain and versioned, for example `#v1&w=8&h=8&c=...&r=1,-1,-0.04,200&p=0.3,0.95,0.15&m=q`. `c` is one character per cell (`_` empty, `w` wall, `S` start, `G` goal, `T` trap), `r` is goal/trap/step reward and max steps, `p` is alpha/gamma/epsilon, `m` is `q`, `s` or `cmp`. It is validated on load; an invalid hash falls back to the example maze.
+### Share links
+`#v1&w=8&h=8&c=...&r=1,-1,-0.04,200&p=0.3,0.95,0.15&m=q` (plus `&n=<planning>` for Dyna-Q). `c` has one character per cell (`_` empty, `w` wall, `S` start, `G` goal, `T` trap), `r` is goal/trap/step reward and max steps, `p` is alpha/gamma/epsilon, `m` is `q`, `s`, `d`, `cmp` (Q-learning vs SARSA) or `cmpd` (Q-learning vs Dyna-Q). Links are validated on load; an invalid link falls back to the example maze. Links made by earlier versions keep working. Lab pages use `#/gridworld`, `#/dopamine` and `#/cartpole`.
 
 ## Run it
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
+npm run build      # static output in dist/
+npm run preview
 ```
-
-Production build: `npm run build` (output in `dist/`, serve with `npm run preview`).
 
 ## Test
 
 ```bash
-npm test           # Vitest: environment, Q-learning and SARSA updates, cliff contrast, share codec, editor helpers
+npm test           # Vitest
 npm run typecheck
 ```
 
-The tests cover deterministic transitions, walls, terminal cells and the step limit; the Q-update checked against hand-computed values (including terminal transitions); epsilon-greedy behaviour; that the agent finds the shortest path through a small maze, that Q-learning and SARSA learn different cliff paths, and that share hashes round-trip and reject invalid input.
+The suite (95 tests at the time of writing) covers: the grid environment; the Q-learning, SARSA and Dyna-Q update rules on hand-computed cases; the Cliff-walk contrast between Q-learning and SARSA; Dyna-Q vs Q-learning; the Bellman-inspector records; the share-link codec (round trips and over 20 invalid inputs); the TD(0) dopamine properties; the CartPole physics; a numerical gradient check of the hand-written backpropagation; and a fixed-seed DQN learning test.
+
+## Measured results
+
+These are real numbers from the tests in this repository, on one machine; the seeds are fixed, so they should reproduce.
+
+- **Dyna-Q vs Q-learning** (example maze, alpha 0.5, gamma 0.95, epsilon 0.2, 20 planning steps, 6 seeds): episodes until the greedy policy follows the shortest path (14 moves): Q-learning 41, 32, 40, 29, 35, 33 (mean 35.0); Dyna-Q 3, 12, 3, 3, 19, 10 (mean 8.3). The test requires only a mean under 75% of Q-learning's.
+- **CartPole DQN** (4-32-32-2, Adam lr 5e-4, batch 64, gamma 0.99, target sync every 500 steps, replay 20,000, epsilon from 1.0 decaying to 0.05 over about 4,300 steps). A uniformly random policy averages **22.8** steps. Greedy evaluation (5 episodes) every 2,500 training steps:
+  - seed 1: 27, 204, 378, 320, 282, 481, 306, 500
+  - seed 2: 10, 175, 175, 500, 168, 185, 208, 164
+  - seed 3: 11, 255, 131, 134, 131, 183, 149, 230
+  - The test requires every seed's mean after the first 5,000 steps to exceed 3x the random policy (measured: 378, 233, 160) and every seed to reach at least 150 steps at some checkpoint (measured bests: 500, 500, 255).
+
+## Limitations
+
+- **The CartPole DQN is not stable.** It learns clearly and often reaches the 500-step cap, but performance oscillates and can regress. Over 30,000 steps with this configuration, the final greedy evaluations of seeds 1 to 4 were 500, 111, 131 and 32 steps. I tuned the learning rate and target-sync interval over a handful of settings and then stopped; it is a faithful small DQN, not a tuned benchmark result. The test therefore checks for clear improvement, not for being solved.
+- The learning-rate and epsilon-decay sliders apply immediately to a running agent, which is useful for exploration but not a controlled experiment; press Reset for a clean run.
+- The dopamine lab is a one-dimensional, one-cue tabular TD(0) learner with a clock-like state representation. It shows the qualitative prediction-error pattern only. It is not a neural model, and it does not claim to reproduce any published data.
+- Gridworld environments are deterministic and small (up to 12 by 12 in the editor); there is no function approximation there. Dyna-Q's model just remembers the last outcome of each state-action pair.
+- Browser coverage: developed and checked in Chrome only (desktop and a 390 px viewport, light and dark). Safari and Firefox, and real touch devices, have not been tested.
 
 ## Layout
 
-- `src/core/` pure TypeScript with no React or DOM imports: `env.ts`, `agent.ts`, `qlearning.ts`, `sarsa.ts`, `trainer.ts`, `edit.ts`, `share.ts`, `rng.ts`
-- `src/worker/` the Web Worker that runs training and posts Q-table snapshots and episode stats
-- `src/ui/` React components and canvas drawing
+- `src/core/` pure TypeScript with no React or DOM imports: `env`, `agent`, `qlearning`, `sarsa`, `dyna`, `trainer`, `inspect`, `share`, `dopamine`, `cartpole`, `nn`, `dqn`, `cartpoleTrainer`, `rng`
+- `src/worker/` the Web Workers (gridworld trainer and CartPole DQN) and their message protocols
+- `src/ui/` React shell, labs and canvas drawing
 
 ## License
 
