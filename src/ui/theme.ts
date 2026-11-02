@@ -1,7 +1,7 @@
 /** Reads the CSS custom properties so canvases follow light/dark mode. */
 export interface Palette {
   paper: string; ink: string; faint: string; grid: string; wall: string;
-  accent: string; pos: [number, number, number]; neg: [number, number, number];
+  accent: string; accentRgb: [number, number, number]; pos: [number, number, number]; neg: [number, number, number];
   goal: string; trap: string; trail: string;
 }
 
@@ -15,7 +15,7 @@ export function readPalette(): Palette {
   const g = (n: string) => cs.getPropertyValue(n).trim();
   return {
     paper: g('--paper'), ink: g('--ink'), faint: g('--faint'), grid: g('--grid'), wall: g('--wall'),
-    accent: g('--accent'), pos: parseRgb(g('--pos-rgb')), neg: parseRgb(g('--neg-rgb')),
+    accent: g('--accent'), accentRgb: parseRgb(g('--accent-rgb')), pos: parseRgb(g('--pos-rgb')), neg: parseRgb(g('--neg-rgb')),
     goal: g('--goal'), trap: g('--trap'), trail: g('--trail'),
   };
 }

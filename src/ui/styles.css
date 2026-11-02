@@ -2,7 +2,7 @@
   --paper: #f6f1e7; --paper-rgb: 246, 241, 231;
   --card: #fbf8f1;
   --ink: #1d1b16; --faint: #6f6a5c; --grid: rgba(29, 27, 22, 0.16); --line: #1d1b16;
-  --wall: #2b2a26; --accent: #d9480f; --accent-ink: #fff;
+  --wall: #2b2a26; --accent: #d9480f; --accent-rgb: 217, 72, 15; --accent-ink: #fff;
   --pos-rgb: 14, 124, 110; --neg-rgb: 190, 40, 60;
   --goal: #0e7c6e; --trap: #b3263a; --trail: #d9480f;
   --shadow: 4px 4px 0 var(--ink);
@@ -16,7 +16,7 @@
     --paper: #15181d; --paper-rgb: 21, 24, 29;
     --card: #1b1f26;
     --ink: #ece6d8; --faint: #9a9484; --grid: rgba(236, 230, 216, 0.14); --line: #ece6d8;
-    --wall: #3a404b; --accent: #ff8a3d; --accent-ink: #1a1306;
+    --wall: #3a404b; --accent: #ff8a3d; --accent-rgb: 255, 138, 61; --accent-ink: #1a1306;
     --pos-rgb: 52, 201, 170; --neg-rgb: 255, 107, 107;
     --goal: #1fa88d; --trap: #e5585a; --trail: #ff8a3d;
     --shadow: 4px 4px 0 rgba(236, 230, 216, 0.85);
@@ -50,12 +50,53 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
 }
 @media (min-width: 900px) {
   .masthead { grid-template-columns: auto 1fr; align-items: end; gap: 32px; }
-  .layout { grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr); align-items: start; }
-  .world { grid-column: 1; grid-row: 1 / span 2; }
-  .controls { grid-column: 2; grid-row: 1; }
-  .params { grid-column: 2; grid-row: 2; }
-  .chart { grid-column: 1; grid-row: 3; }
-  .env { grid-column: 2; grid-row: 3; }
+  .layout {
+    grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr); align-items: start;
+    grid-template-areas: "world controls" "world params" "chart env" "td td";
+  }
+  .layout.compare {
+    grid-template-areas: "world world" "controls params" "chart chart" "td env";
+  }
+  .world { grid-area: world; }
+  .controls { grid-area: controls; }
+  .params { grid-area: params; }
+  .chart { grid-area: chart; }
+  .env { grid-area: env; }
+  .td { grid-area: td; }
+}
+
+.boards { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.compare .boards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.board { margin: 0; min-width: 0; }
+.chip {
+  display: inline-block; padding: 2px 10px; font: 700 0.78rem var(--mono); letter-spacing: 0.04em;
+  border: 2px solid var(--line); border-radius: 999px; margin-bottom: 6px;
+}
+.chip-0 { background: var(--accent); color: var(--accent-ink); }
+.chip-1 { background: transparent; border-style: dashed; }
+.stats-title { margin: 14px 0 0; }
+.charts { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+.compare .charts { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+
+.seg { display: inline-flex; border: 2px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg.right { margin-left: auto; }
+.seg button {
+  min-height: 36px; padding: 4px 12px; font: 600 0.85rem var(--sans); color: var(--ink);
+  background: transparent; border: 0; cursor: pointer;
+}
+.seg button + button { border-left: 2px solid var(--line); }
+.seg button.on { background: var(--ink); color: var(--paper); }
+.modes { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-top: 16px; }
+.field.inline { min-width: 140px; }
+.legend .ramp-td { background: linear-gradient(90deg, var(--paper), var(--accent)); }
+
+.why { margin-top: 12px; font-size: 0.88rem; }
+.why summary { cursor: pointer; font-weight: 600; min-height: 28px; }
+.why p { margin: 8px 0 0; color: var(--faint); max-width: 70ch; }
+.share { display: grid; gap: 8px; margin-top: 14px; justify-items: start; }
+.share input {
+  width: 100%; min-height: 40px; padding: 6px 8px; font: 0.8rem var(--mono);
+  color: var(--ink); background: var(--paper); border: 2px solid var(--line); border-radius: 4px;
 }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
@@ -70,6 +111,7 @@ h2 { font-size: 1.15rem; margin-bottom: 12px; }
 .tool-goal i { background: var(--goal); }
 .tool-trap i { background: var(--trap); }
 .tool.on { background: var(--ink); color: var(--paper); }
+.toolbar { align-items: center; }
 .tool.on i { border-color: var(--paper); }
 
 .canvas-wrap { border: 2px solid var(--line); border-radius: 2px; background: var(--paper); line-height: 0; }

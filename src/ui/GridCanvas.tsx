@@ -6,7 +6,11 @@ import { useCanvas } from './useCanvas';
 
 interface Props {
   spec: EnvSpec;
-  live: React.MutableRefObject<LiveData>;
+  live: React.MutableRefObject<LiveData[]>;
+  /** Which agent's data to draw. */
+  index: number;
+  /** 'value': heatmap of max Q. 'td': heatmap of running mean |TD error|. */
+  view: 'value' | 'td';
   showNumbers: boolean;
   showTrail: boolean;
   onPaint: (x: number, y: number) => void;
@@ -29,17 +33,24 @@ function drawArrow(ctx: CanvasRenderingContext2D, cx: number, cy: number, dir: r
   ctx.stroke();
 }
 
-export function GridCanvas({ spec, live, showNumbers, showTrail, onPaint }: Props) {
+export function GridCanvas({ spec, live, index, view, showNumbers, showTrail, onPaint }: Props) {
   const specRef = useRef(spec);
   specRef.current = spec;
-  const opts = useRef({ showNumbers, showTrail });
-  opts.current = { showNumbers, showTrail };
+  const opts = useRef({ showNumbers, showTrail, view, index });
+  opts.current = { showNumbers, showTrail, view, index };
   const painting = useRef(false);
 
   const draw = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
     const { width, height, cells } = specRef.current;
-    const { q, state, trail } = live.current;
     const P = readPalette();
+    const data = live.current[opts.current.index];
+    if (!data) {
+      ctx.fillStyle = P.paper;
+      ctx.fillRect(0, 0, w, h);
+      return;
+    }
+    const { q, state, trail, tdMean } = data;
+    const tdView = opts.current.view === 'td';
     const paper = paperRgb();
     const cs = w / width;
     ctx.clearRect(0, 0, w, h);
@@ -48,11 +59,13 @@ export function GridCanvas({ spec, live, showNumbers, showTrail, onPaint }: Prop
 
     // Normalise the heatmap by the largest |max Q| among ordinary cells.
     let scale = 1e-6;
+    let tdScale = 1e-6;
     for (let s = 0; s < cells.length; s++) {
       if (cells[s] === 'wall' || cells[s] === 'goal' || cells[s] === 'trap') continue;
       let m = -Infinity;
       for (let a = 0; a < NUM_ACTIONS; a++) m = Math.max(m, q[s * NUM_ACTIONS + a]);
       scale = Math.max(scale, Math.abs(m));
+      tdScale = Math.max(tdScale, tdMean[s]);
     }
 
     ctx.font = `600 ${Math.max(9, cs * 0.17)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
@@ -86,7 +99,13 @@ export function GridCanvas({ spec, live, showNumbers, showTrail, onPaint }: Prop
         if (v > best + 1e-9) { best = v; bestA = a; }
       }
       const terminal = cell === 'goal' || cell === 'trap';
-      if (!terminal && anyNonZero) {
+      if (!terminal && tdView) {
+        if (tdMean[s] > 0) {
+          const t = Math.sqrt(Math.min(1, tdMean[s] / tdScale));
+          ctx.fillStyle = tint(P.accentRgb, paper, 0.06 + 0.84 * t);
+          ctx.fillRect(x, y, cs, cs);
+        }
+      } else if (!terminal && anyNonZero) {
         const t = Math.min(1, Math.abs(best) / scale);
         ctx.fillStyle = tint(best >= 0 ? P.pos : P.neg, paper, 0.08 + 0.8 * t);
         ctx.fillRect(x, y, cs, cs);
@@ -112,7 +131,7 @@ export function GridCanvas({ spec, live, showNumbers, showTrail, onPaint }: Prop
         ctx.stroke();
       } else if (anyNonZero) {
         ctx.strokeStyle = P.ink;
-        ctx.globalAlpha = 0.8;
+        ctx.globalAlpha = tdView ? 0.35 : 0.8;
         ctx.lineWidth = Math.max(1.5, cs * 0.045);
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -121,7 +140,7 @@ export function GridCanvas({ spec, live, showNumbers, showTrail, onPaint }: Prop
         if (opts.current.showNumbers) {
           ctx.fillStyle = P.ink;
           ctx.textAlign = 'center';
-          ctx.fillText(best.toFixed(2), x + cs / 2, y + cs - cs * 0.08);
+          ctx.fillText((tdView ? tdMean[s] : best).toFixed(2), x + cs / 2, y + cs - cs * 0.08);
         }
       }
       if (cell === 'start') {

@@ -5,10 +5,18 @@ import { useCanvas } from './useCanvas';
 
 const MAX_BINS = 320;
 
-export function RewardChart({ live }: { live: React.MutableRefObject<LiveData> }) {
+interface Props {
+  live: React.MutableRefObject<LiveData[]>;
+  index: number;
+  /** Use one y-range across all agents so curves are directly comparable. */
+  shareAxis: boolean;
+}
+
+export function RewardChart({ live, index, shareAxis }: Props) {
   const draw = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
     const P = readPalette();
-    const { rewards, episodeOffset } = live.current;
+    const all = live.current;
+    const { rewards, episodeOffset } = all[index] ?? { rewards: [] as number[], episodeOffset: 0 };
     const n = rewards.length;
     ctx.fillStyle = P.paper;
     ctx.fillRect(0, 0, w, h);
@@ -34,7 +42,9 @@ export function RewardChart({ live }: { live: React.MutableRefObject<LiveData> }
       bins.push(s / c);
     }
     let lo = Infinity, hi = -Infinity;
-    for (const v of rewards) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    for (const d of shareAxis ? all : [all[index]]) {
+      for (const v of d.rewards) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    }
     if (hi - lo < 1e-6) { lo -= 0.5; hi += 0.5; }
     const padY = (hi - lo) * 0.08;
     lo -= padY; hi += padY;
