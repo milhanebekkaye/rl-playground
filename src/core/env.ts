@@ -79,6 +79,23 @@ export function defaultSpec(): EnvSpec {
   return { width, height, cells, goalReward: 1, trapReward: -1, stepReward: -0.04, maxSteps: 200 };
 }
 
+/**
+ * Classic cliff-walking layout (Sutton & Barto, example 6.6), with the cliff as
+ * terminal trap cells: start bottom-left, goal bottom-right, the cliff between.
+ * Q-learning learns the short path along the cliff edge; SARSA, which accounts
+ * for its own exploratory slips, learns a safer path further from the edge.
+ */
+export function cliffSpec(): EnvSpec {
+  const width = 12;
+  const height = 4;
+  const cells: CellType[] = new Array(width * height).fill('empty');
+  const bottom = (height - 1) * width;
+  cells[bottom] = 'start';
+  for (let x = 1; x < width - 1; x++) cells[bottom + x] = 'trap';
+  cells[bottom + width - 1] = 'goal';
+  return { width, height, cells, goalReward: 0, trapReward: -100, stepReward: -1, maxSteps: 200 };
+}
+
 /** Returns a human-readable problem with the spec, or null if it is usable. */
 export function validateSpec(spec: EnvSpec): string | null {
   if (spec.cells.length !== spec.width * spec.height) return 'cells length does not match width * height';

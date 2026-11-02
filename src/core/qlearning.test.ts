@@ -131,3 +131,45 @@ describe('learning a small maze', () => {
     expect(agent.value(0, 1)).toBeCloseTo(0.9, 12);
   });
 });
+
+describe('Trainer step semantics', () => {
+  const corridor = (): EnvSpec => ({
+    width: 3, height: 1, cells: ['start', 'empty', 'goal'],
+    goalReward: 1, trapReward: -1, stepReward: -0.1, maxSteps: 50,
+  });
+
+  it('keeps the final transition visible until the next step', () => {
+    const t = new Trainer(corridor(), { alpha: 0.5, gamma: 0.9, epsilon: 1 }, 3);
+    let rec = null;
+    while (!rec) rec = t.stepOnce();
+    // Episode just ended in the goal: the agent is still shown there, trail not reset.
+    expect(t.env.currentState).toBe(2);
+    expect(t.trail[t.trail.length - 1]).toBe(2);
+    expect(t.trail.length).toBeGreaterThan(1);
+    t.stepOnce();
+    expect(t.trail[0]).toBe(0);
+    expect(t.trail.length).toBeLessThanOrEqual(2);
+  });
+
+  it('tracks per-cell mean |TD error| and drains the batch accumulator', () => {
+    const t = new Trainer(corridor(), { alpha: 0.5, gamma: 0.9, epsilon: 0 }, 1);
+    t.run(3);
+    expect(t.tdMean.some((v) => v > 0)).toBe(true);
+    const b = t.drainTd();
+    expect(b.n).toBe(3);
+    expect(b.sumAbs).toBeGreaterThanOrEqual(Math.abs(b.sumSigned));
+    expect(t.drainTd().n).toBe(0);
+  });
+
+  it('SARSA also solves the small maze and is reproducible', () => {
+    const run = () => {
+      const t = new Trainer(maze(), { alpha: 0.3, gamma: 0.95, epsilon: 0.05 }, 11, 'sarsa');
+      while (t.episodes < 2500) t.stepOnce();
+      return t;
+    };
+    const a = run();
+    const b = run();
+    expect(Array.from(a.agent.q)).toEqual(Array.from(b.agent.q));
+    expect(a.greedyRollout().outcome).toBe('goal');
+  });
+});
