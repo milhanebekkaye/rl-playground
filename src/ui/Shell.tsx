@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react';
+import { CartPoleLab } from './labs/CartPoleLab';
 import { DopamineLab } from './labs/DopamineLab';
 import { GridworldLab } from './labs/GridworldLab';
 
-export type LabId = 'home' | 'gridworld' | 'dopamine';
+export type LabId = 'home' | 'gridworld' | 'dopamine' | 'cartpole';
 
 /** `#v1&...` share links from V1/V2 still open the gridworld; `#/name` selects a lab. */
 export function labFromHash(hash: string): LabId {
   if (hash.startsWith('#v1')) return 'gridworld';
   const name = hash.replace(/^#\/?/, '').split(/[?&]/)[0];
-  return name === 'gridworld' || name === 'dopamine' ? name : 'home';
+  return name === 'gridworld' || name === 'dopamine' || name === 'cartpole' ? name : 'home';
 }
 
 const NAV: { id: LabId; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'gridworld', label: 'Gridworld' },
   { id: 'dopamine', label: 'Dopamine lab' },
+  { id: 'cartpole', label: 'CartPole' },
 ];
 
 export function Shell() {
@@ -45,6 +47,7 @@ export function Shell() {
       </nav>
       {lab === 'gridworld' && <GridworldLab />}
       {lab === 'dopamine' && <DopamineLab />}
+      {lab === 'cartpole' && <CartPoleLab />}
       {lab === 'home' && <Home go={go} />}
       <footer className="foot">MIT licensed. Everything runs in your browser; nothing leaves the page.</footer>
     </div>
