@@ -8,7 +8,11 @@
  *   c  one char per cell, row-major: _ empty, w wall, S start, G goal, T trap
  *   r  goal reward, trap reward, step reward, max steps
  *   p  alpha, gamma, epsilon
- *   m  q (Q-learning), s (SARSA) or cmp (side-by-side comparison)
+ *   m  q (Q-learning), s (SARSA), d (Dyna-Q), cmp (Q-learning vs SARSA side by side)
+ *      or cmpd (Q-learning vs Dyna-Q side by side)
+ *   n  optional planning steps for Dyna-Q (0-50, default 10); written only when Dyna-Q is used
+ *
+ * Links written by V2 (m=q|s|cmp, no n) remain valid.
  *
  * decodeShare() validates everything and returns null on any problem so the
  * caller can fall back to the default maze.
@@ -29,7 +33,14 @@ export interface ShareState {
   compare: boolean;
   /** Algorithm for single-agent mode. */
   algo: Algo;
+  /** The opponent of Q-learning in compare mode. */
+  versus: 'sarsa' | 'dyna';
+  /** Dyna-Q planning steps per real step. */
+  planning: number;
 }
+
+export const DEFAULT_PLANNING = 10;
+const MAX_PLANNING = 50;
 
 const CHAR_OF: Record<CellType, string> = { empty: '_', wall: 'w', start: 'S', goal: 'G', trap: 'T' };
 const CELL_OF: Record<string, CellType> = { _: 'empty', w: 'wall', S: 'start', G: 'goal', T: 'trap' };
@@ -39,7 +50,10 @@ const num = (n: number) => String(Math.round(n * 10000) / 10000);
 export function encodeShare(st: ShareState): string {
   const { spec, params } = st;
   const cells = spec.cells.map((c) => CHAR_OF[c]).join('');
-  const m = st.compare ? 'cmp' : st.algo === 'sarsa' ? 's' : 'q';
+  const m = st.compare
+    ? st.versus === 'dyna' ? 'cmpd' : 'cmp'
+    : st.algo === 'sarsa' ? 's' : st.algo === 'dyna' ? 'd' : 'q';
+  const usesDyna = m === 'd' || m === 'cmpd';
   return [
     SHARE_VERSION,
     `w=${spec.width}`,
@@ -48,6 +62,7 @@ export function encodeShare(st: ShareState): string {
     `r=${[spec.goalReward, spec.trapReward, spec.stepReward, spec.maxSteps].map(num).join(',')}`,
     `p=${[params.alpha, params.gamma, params.epsilon].map(num).join(',')}`,
     `m=${m}`,
+    ...(usesDyna ? [`n=${Math.round(st.planning)}`] : []),
   ].join('&');
 }
 
@@ -106,11 +121,24 @@ export function decodeShare(hash: string): ShareState | null {
     if ([alpha, gamma, epsilon].some((v) => v < 0 || v > 1)) return null;
 
     const m = kv.get('m');
-    if (m !== 'q' && m !== 's' && m !== 'cmp') return null;
+    if (m !== 'q' && m !== 's' && m !== 'd' && m !== 'cmp' && m !== 'cmpd') return null;
+    let planning = DEFAULT_PLANNING;
+    if (kv.has('n')) {
+      const n = parseNumbers(kv.get('n'), 1);
+      if (!n || !Number.isInteger(n[0]) || n[0] < 0 || n[0] > MAX_PLANNING) return null;
+      planning = n[0];
+    }
 
     const spec: EnvSpec = { width, height, cells, goalReward, trapReward, stepReward, maxSteps };
     if (validateSpec(spec) !== null) return null;
-    return { spec, params: { alpha, gamma, epsilon }, compare: m === 'cmp', algo: m === 's' ? 'sarsa' : 'qlearning' };
+    return {
+      spec,
+      params: { alpha, gamma, epsilon },
+      compare: m === 'cmp' || m === 'cmpd',
+      algo: m === 's' ? 'sarsa' : m === 'd' ? 'dyna' : 'qlearning',
+      versus: m === 'cmpd' ? 'dyna' : 'sarsa',
+      planning,
+    };
   } catch {
     return null;
   }

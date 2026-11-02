@@ -7,6 +7,8 @@ const base = (): ShareState => ({
   params: { alpha: 0.3, gamma: 0.95, epsilon: 0.15 },
   compare: false,
   algo: 'qlearning',
+  versus: 'sarsa',
+  planning: 10,
 });
 
 describe('share hash', () => {
@@ -25,6 +27,24 @@ describe('share hash', () => {
     ]) {
       expect(decodeShare(encodeShare(st))).toEqual(st);
     }
+  });
+
+  it('round-trips Dyna-Q modes with planning steps', () => {
+    const single = { ...base(), algo: 'dyna' as const, planning: 25 };
+    expect(encodeShare(single)).toMatch(/&m=d&n=25$/);
+    expect(decodeShare(encodeShare(single))).toEqual(single);
+    const cmp = { ...base(), compare: true, versus: 'dyna' as const, planning: 0 };
+    expect(encodeShare(cmp)).toMatch(/&m=cmpd&n=0$/);
+    expect(decodeShare(encodeShare(cmp))).toEqual(cmp);
+  });
+
+  it('still reads links written by V2 (no n field, m=q|s|cmp)', () => {
+    const v2 = 'v1&w=3&h=2&c=S____G&r=1,-1,-0.04,200&p=0.3,0.95,0.15&m=cmp';
+    const d = decodeShare(v2)!;
+    expect(d.compare).toBe(true);
+    expect(d.versus).toBe('sarsa');
+    expect(d.spec.width).toBe(3);
+    expect(decodeShare(v2.replace('m=cmp', 'm=s'))!.algo).toBe('sarsa');
   });
 
   it('accepts a leading #', () => {
@@ -56,6 +76,8 @@ describe('share hash', () => {
     ['negative epsilon', good.replace('0.15&', '-0.1&')],
     ['zero max steps', good.replace(',200&', ',0&')],
     ['bad mode', good.replace('m=q', 'm=x')],
+    ['planning out of range', good.replace('m=q', 'm=d&n=51')],
+    ['planning not an integer', good.replace('m=q', 'm=d&n=2.5')],
     ['missing field', good.replace(/&p=[^&]*/, '')],
     ['duplicate key', good + '&m=s'],
     ['too long', good + '&' + 'z'.repeat(3000)],

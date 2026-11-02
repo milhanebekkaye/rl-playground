@@ -26,11 +26,13 @@ function post(): void {
   const agents: AgentSnapshot[] = trainers.map((t, i) => {
     const q = Float32Array.from(t.agent.q);
     const tdMean = Float32Array.from(t.tdMean);
-    transfer.push(q.buffer, tdMean.buffer);
+    const inspect = Float32Array.from(t.agent.inspect);
+    transfer.push(q.buffer, tdMean.buffer, inspect.buffer);
     const snap: AgentSnapshot = {
       algo: t.algo,
       q,
       tdMean,
+      inspect,
       state: t.env.currentState,
       trail: t.trail.slice(),
       episodes: t.episodes,
@@ -67,7 +69,7 @@ ctx.onmessage = (e) => {
   switch (m.type) {
     case 'init':
       gen = m.gen;
-      trainers = m.algos.map((algo) => new Trainer(m.spec, m.params, m.seed, algo));
+      trainers = m.algos.map((algo) => new Trainer(m.spec, m.params, m.seed, algo, m.planning));
       pending = trainers.map(() => []);
       playing = false;
       budget = 0;
@@ -92,6 +94,9 @@ ctx.onmessage = (e) => {
       break;
     case 'params':
       trainers.forEach((t) => t.agent.setParams(m.params));
+      break;
+    case 'planning':
+      trainers.forEach((t) => t.setPlanning(m.n));
       break;
     case 'speed':
       stepsPerSecond = m.stepsPerSecond;

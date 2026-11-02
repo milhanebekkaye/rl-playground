@@ -7,9 +7,10 @@ import { GridEnv, NUM_ACTIONS, type EnvSpec, type Outcome } from './env';
 import type { TabularAgent, QParams } from './agent';
 import { QLearning } from './qlearning';
 import { Sarsa } from './sarsa';
+import { DynaQ } from './dyna';
 import { mulberry32 } from './rng';
 
-export type Algo = 'qlearning' | 'sarsa';
+export type Algo = 'qlearning' | 'sarsa' | 'dyna';
 
 export interface EpisodeRecord {
   reward: number;
@@ -43,13 +44,15 @@ export class Trainer {
   private needsReset = false;
   private td: TdBatch = { n: 0, sumAbs: 0, sumSigned: 0 };
 
-  constructor(spec: EnvSpec, params: QParams, seed = 1, readonly algo: Algo = 'qlearning') {
+  constructor(spec: EnvSpec, params: QParams, seed = 1, readonly algo: Algo = 'qlearning', planning = 10) {
     this.env = new GridEnv(spec);
     const rng = mulberry32(seed);
     this.agent =
       algo === 'sarsa'
         ? new Sarsa(this.env.numStates, NUM_ACTIONS, params, rng)
-        : new QLearning(this.env.numStates, NUM_ACTIONS, params, rng);
+        : algo === 'dyna'
+          ? new DynaQ(this.env.numStates, NUM_ACTIONS, params, rng, planning)
+          : new QLearning(this.env.numStates, NUM_ACTIONS, params, rng);
     this.tdMean = new Float32Array(this.env.numStates);
     this.trail = [this.env.reset()];
   }
@@ -106,6 +109,11 @@ export class Trainer {
       if (r) done.push(r);
     }
     return done;
+  }
+
+  /** Changes the number of planning updates per real step (Dyna-Q only). */
+  setPlanning(n: number): void {
+    if (this.agent instanceof DynaQ) this.agent.planningSteps = n;
   }
 
   /** Returns and clears the TD errors accumulated since the previous call. */

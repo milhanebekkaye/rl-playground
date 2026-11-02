@@ -17,9 +17,11 @@ export class Sarsa extends TabularAgent {
   /** Applies one SARSA update and returns the TD error. `nextAction` is ignored when terminal. */
   update(s: number, a: number, reward: number, next: number, nextAction: number, terminal: boolean): number {
     const { alpha, gamma } = this.params;
-    const target = reward + (terminal ? 0 : gamma * this.value(next, nextAction));
-    const tdError = target - this.value(s, a);
-    this.q[s * this.numActions + a] += alpha * tdError;
+    const qBefore = this.value(s, a);
+    const bootstrap = terminal ? 0 : this.value(next, nextAction);
+    const tdError = reward + gamma * bootstrap - qBefore;
+    this.q[s * this.numActions + a] = qBefore + alpha * tdError;
+    this.record(s, a, reward, next, bootstrap, tdError, terminal, qBefore);
     return tdError;
   }
 }

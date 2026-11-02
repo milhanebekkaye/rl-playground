@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NUM_ACTIONS, type EnvSpec, type Outcome } from '../core/env';
+import { INSPECT_STRIDE } from '../core/inspect';
 import type { QParams } from '../core/agent';
 import type { Algo } from '../core/trainer';
 import type { Snapshot, ToWorker } from '../worker/protocol';
@@ -10,6 +11,8 @@ export interface LiveData {
   q: Float32Array;
   /** Per-cell running mean of |TD error|. */
   tdMean: Float32Array;
+  /** Bellman-inspector records (see core/inspect.ts). */
+  inspect: Float32Array;
   state: number;
   trail: number[];
   rewards: number[];
@@ -41,6 +44,7 @@ function freshLive(spec: EnvSpec, algo: Algo): LiveData {
     algo,
     q: new Float32Array(n * NUM_ACTIONS),
     tdMean: new Float32Array(n),
+    inspect: new Float32Array(n * NUM_ACTIONS * INSPECT_STRIDE),
     state: start,
     trail: [start],
     rewards: [],
@@ -51,12 +55,14 @@ function freshLive(spec: EnvSpec, algo: Algo): LiveData {
   };
 }
 
-export function useTrainer(spec: EnvSpec, params: QParams, speed: number, resetNonce: number, algos: Algo[]) {
+export function useTrainer(spec: EnvSpec, params: QParams, speed: number, resetNonce: number, algos: Algo[], planning: number) {
   const workerRef = useRef<Worker | null>(null);
   const genRef = useRef(0);
   const live = useRef<LiveData[]>(algos.map((a) => freshLive(spec, a)));
   const paramsRef = useRef(params);
   const speedRef = useRef(speed);
+  const planningRef = useRef(planning);
+  planningRef.current = planning;
   paramsRef.current = params;
   speedRef.current = speed;
   const [playing, setPlaying] = useState(false);
@@ -77,6 +83,7 @@ export function useTrainer(spec: EnvSpec, params: QParams, speed: number, resetN
         if (!d) return;
         d.q = snap.q;
         d.tdMean = snap.tdMean;
+        d.inspect = snap.inspect;
         d.state = snap.state;
         d.trail = snap.trail;
         for (const r of snap.finished) {
@@ -126,12 +133,13 @@ export function useTrainer(spec: EnvSpec, params: QParams, speed: number, resetN
     live.current = algos.map((a) => freshLive(spec, a));
     setPlaying(false);
     setStats(algos.map(() => EMPTY_STATS));
-    send({ type: 'init', gen: genRef.current, spec, params: paramsRef.current, seed: (Date.now() & 0xffff) + 1, algos });
+    send({ type: 'init', gen: genRef.current, spec, params: paramsRef.current, seed: (Date.now() & 0xffff) + 1, algos, planning: planningRef.current });
     send({ type: 'speed', stepsPerSecond: speedRef.current });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec, resetNonce, send, algoKey]);
 
   useEffect(() => send({ type: 'params', params }), [params, send]);
+  useEffect(() => send({ type: 'planning', n: planning }), [planning, send]);
   useEffect(() => send({ type: 'speed', stepsPerSecond: speed }), [speed, send]);
 
   const play = useCallback(() => { setPlaying(true); send({ type: 'play' }); }, [send]);

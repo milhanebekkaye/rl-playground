@@ -9,12 +9,18 @@ import { TabularAgent } from './agent';
 export type { QParams } from './agent';
 
 export class QLearning extends TabularAgent {
-  /** Applies one Q-learning update and returns the TD error. */
+  /** Applies one real Q-learning update (recorded for the inspector) and returns the TD error. */
   update(s: number, a: number, reward: number, next: number, terminal: boolean): number {
+    return this.apply(s, a, reward, next, terminal, true);
+  }
+
+  protected apply(s: number, a: number, reward: number, next: number, terminal: boolean, record: boolean): number {
     const { alpha, gamma } = this.params;
-    const target = reward + (terminal ? 0 : gamma * this.maxQ(next));
-    const tdError = target - this.value(s, a);
-    this.q[s * this.numActions + a] += alpha * tdError;
+    const qBefore = this.value(s, a);
+    const bootstrap = terminal ? 0 : this.maxQ(next);
+    const tdError = reward + gamma * bootstrap - qBefore;
+    this.q[s * this.numActions + a] = qBefore + alpha * tdError;
+    if (record) this.record(s, a, reward, next, bootstrap, tdError, terminal, qBefore);
     return tdError;
   }
 }

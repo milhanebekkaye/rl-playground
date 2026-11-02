@@ -1,33 +1,40 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { applyTool, resizeSpec, type Tool } from '../core/edit';
-import { cliffSpec, defaultSpec, emptySpec, type EnvSpec } from '../core/env';
-import type { QParams } from '../core/agent';
-import { decodeShare, encodeShare } from '../core/share';
-import type { Algo } from '../core/trainer';
-import { GridCanvas } from './GridCanvas';
-import { NumField } from './NumField';
-import { RewardChart } from './RewardChart';
-import { TdChart } from './TdChart';
-import { useTrainer } from './useTrainer';
+import { applyTool, resizeSpec, type Tool } from '../../core/edit';
+import { cliffSpec, defaultSpec, emptySpec, type EnvSpec } from '../../core/env';
+import type { QParams } from '../../core/agent';
+import { DEFAULT_PLANNING, decodeShare, encodeShare } from '../../core/share';
+import type { Algo } from '../../core/trainer';
+import { GridCanvas } from '../GridCanvas';
+import { Inspector } from '../Inspector';
+import { NumField } from '../NumField';
+import { RewardChart } from '../RewardChart';
+import { TdChart } from '../TdChart';
+import { useTrainer } from '../useTrainer';
 
-const TOOLS: { id: Tool; label: string; key: string }[] = [
+type UiTool = Tool | 'inspect';
+const TOOLS: { id: UiTool; label: string; key: string }[] = [
   { id: 'wall', label: 'Wall', key: 'wall' },
   { id: 'start', label: 'Start', key: 'start' },
   { id: 'goal', label: 'Goal', key: 'goal' },
   { id: 'trap', label: 'Trap', key: 'trap' },
   { id: 'erase', label: 'Erase', key: 'erase' },
+  { id: 'inspect', label: 'Inspect', key: 'inspect' },
 ];
 
-const ALGO_NAME: Record<Algo, string> = { qlearning: 'Q-learning', sarsa: 'SARSA' };
+const ALGO_NAME: Record<Algo, string> = { qlearning: 'Q-learning', sarsa: 'SARSA', dyna: 'Dyna-Q' };
 const DEFAULT_PARAMS: QParams = { alpha: 0.3, gamma: 0.95, epsilon: 0.15 };
 const CLIFF_PARAMS: QParams = { alpha: 0.2, gamma: 0.99, epsilon: 0.1 };
 
 function initialFromHash() {
   const hash = typeof location === 'undefined' ? '' : location.hash;
-  const decoded = hash.length > 1 ? decodeShare(hash) : null;
+  const decoded = hash.startsWith('#v1') ? decodeShare(hash) : null;
   return {
-    state: decoded ?? { spec: defaultSpec(), params: DEFAULT_PARAMS, compare: false, algo: 'qlearning' as Algo },
-    invalid: hash.length > 1 && decoded === null,
+    state: decoded ?? {
+      spec: defaultSpec(), params: DEFAULT_PARAMS, compare: false, algo: 'qlearning' as Algo,
+      versus: 'sarsa' as 'sarsa' | 'dyna', planning: DEFAULT_PLANNING,
+    },
+    // Only a malformed share link (#v1...) is an error; #/gridworld is just navigation.
+    invalid: hash.startsWith('#v1') && decoded === null,
   };
 }
 
@@ -50,32 +57,35 @@ function Slider(props: { label: string; value: number; min: number; max: number;
   );
 }
 
-export function App() {
+export function GridworldLab() {
   const [initial] = useState(initialFromHash);
   const [spec, setSpec] = useState<EnvSpec>(initial.state.spec);
   const [params, setParams] = useState<QParams>(initial.state.params);
   const [compare, setCompare] = useState(initial.state.compare);
   const [algo, setAlgo] = useState<Algo>(initial.state.algo);
+  const [versus, setVersus] = useState<'sarsa' | 'dyna'>(initial.state.versus);
+  const [planning, setPlanning] = useState(initial.state.planning);
+  const [inspected, setInspected] = useState<number | null>(null);
   const [view, setView] = useState<'value' | 'td'>('value');
   const [notice, setNotice] = useState<string | null>(
     initial.invalid ? 'That link was not a valid maze, so the example maze was loaded instead.' : null,
   );
   const [link, setLink] = useState<{ url: string; copied: boolean } | null>(null);
   const [speed, setSpeed] = useState(120);
-  const [tool, setTool] = useState<Tool>('wall');
+  const [tool, setTool] = useState<UiTool>('wall');
   const [resetNonce, setResetNonce] = useState(0);
   const [showNumbers, setShowNumbers] = useState(false);
   const [showTrail, setShowTrail] = useState(true);
 
-  const algos = useMemo<Algo[]>(() => (compare ? ['qlearning', 'sarsa'] : [algo]), [compare, algo]);
-  const { live, stats, playing, play, pause, step } = useTrainer(spec, params, speed, resetNonce, algos);
+  const algos = useMemo<Algo[]>(() => (compare ? ['qlearning', versus] : [algo]), [compare, versus, algo]);
+  const { live, stats, playing, play, pause, step } = useTrainer(spec, params, speed, resetNonce, algos, planning);
 
   // Load a maze when the hash changes while the page is open (e.g. pasting a link in the same tab).
   useEffect(() => {
     const onHash = () => {
       const d = decodeShare(location.hash);
       if (!d) return;
-      setSpec(d.spec); setParams(d.params); setCompare(d.compare); setAlgo(d.algo);
+      setSpec(d.spec); setParams(d.params); setCompare(d.compare); setAlgo(d.algo); setVersus(d.versus); setPlanning(d.planning);
       setNotice(null); setLink(null);
     };
     window.addEventListener('hashchange', onHash);
@@ -83,7 +93,7 @@ export function App() {
   }, []);
 
   const copyLink = async () => {
-    const hash = encodeShare({ spec, params, compare, algo });
+    const hash = encodeShare({ spec, params, compare, algo, versus, planning });
     const url = `${location.origin}${location.pathname}${location.search}#${hash}`;
     try { history.replaceState(null, '', `#${hash}`); } catch { /* sandboxed frames may forbid this */ }
     let copied = false;
@@ -92,8 +102,17 @@ export function App() {
   };
 
   const onPaint = useCallback((x: number, y: number) => {
+    if (tool === 'inspect') {
+      setInspected(y * spec.width + x);
+      return;
+    }
     setSpec((s) => applyTool(s, tool, y * s.width + x));
-  }, [tool]);
+  }, [tool, spec.width]);
+
+  // Selecting a cell only makes sense for the current grid; drop it when the grid changes shape.
+  useEffect(() => {
+    setInspected((c) => (c !== null && c < spec.width * spec.height && spec.cells[c] !== 'wall' ? c : null));
+  }, [spec]);
 
   const patch = (p: Partial<EnvSpec>) => setSpec((s) => ({ ...s, ...p }));
   const setParam = (p: Partial<QParams>) => setParams((q) => ({ ...q, ...p }));
@@ -111,11 +130,11 @@ export function App() {
   };
 
   return (
-    <div className="app">
+    <div className="lab">
       <header className="masthead">
         <div>
-          <p className="eyebrow">Reinforcement learning, in your browser</p>
-          <h1>RL <em>Playground</em></h1>
+          <p className="eyebrow">Gridworld lab</p>
+          <h1>Learn a <em>maze</em></h1>
         </div>
         <p className="lede">
           Draw a small world. A Q-learning or SARSA agent explores it by trial and error, and the board shows what it
@@ -150,7 +169,7 @@ export function App() {
               <figure className="board" key={a}>
                 {compare && <figcaption><span className={`chip chip-${i}`}>{ALGO_NAME[a]}</span></figcaption>}
                 <div className="canvas-wrap">
-                  <GridCanvas spec={spec} live={live} index={i} view={view} showNumbers={showNumbers} showTrail={showTrail} onPaint={onPaint} />
+                  <GridCanvas spec={spec} live={live} index={i} view={view} selected={tool === 'inspect' ? inspected : null} showNumbers={showNumbers} showTrail={showTrail} onPaint={onPaint} />
                 </div>
               </figure>
             ))}
@@ -172,6 +191,17 @@ export function App() {
               ? 'Click or drag on the grid to draw. Editing the world resets what the agents have learned.'
               : 'Colour is the running mean of |TD error| per cell: where predictions are still being corrected. Arrows still show the greedy policy.'}
           </p>
+          {tool === 'inspect' && (
+            <div className="inspectors">
+              {inspected === null ? (
+                <p className="hint">Click a cell to see, for each action, its Q-value, how often it was updated, and the arithmetic of its latest Bellman update.</p>
+              ) : (
+                algos.map((a, i) => live.current[i] && (
+                  <Inspector key={a} live={live.current[i]} cell={inspected} width={spec.width} title={compare ? ALGO_NAME[a] : undefined} />
+                ))
+              )}
+            </div>
+          )}
         </section>
 
         <section className="card controls" aria-label="Playback">
@@ -195,11 +225,28 @@ export function App() {
                 <select value={algo} onChange={(e) => setAlgo(e.target.value as Algo)}>
                   <option value="qlearning">Q-learning</option>
                   <option value="sarsa">SARSA</option>
+                  <option value="dyna">Dyna-Q</option>
+                </select>
+              </label>
+            )}
+            {compare && (
+              <label className="field inline">
+                <span>Q-learning vs</span>
+                <select value={versus} onChange={(e) => setVersus(e.target.value as 'sarsa' | 'dyna')}>
+                  <option value="sarsa">SARSA</option>
+                  <option value="dyna">Dyna-Q</option>
                 </select>
               </label>
             )}
           </div>
           {compare && <p className="hint">Both agents get the same maze, hyperparameters, seed and number of steps.</p>}
+          {algos.includes('dyna') && (
+            <Slider
+              label="Planning steps" value={planning} min={0} max={50} step={1} display={String(planning)}
+              onChange={setPlanning}
+              hint="Extra updates per real step, replayed from a learned model of the world. 0 is plain Q-learning."
+            />
+          )}
           <Slider
             label="Speed" value={fromSpeed(speed)} min={0} max={1} step={0.005}
             onChange={(p) => setSpeed(toSpeed(p))} display={`${speed.toLocaleString()} steps/s`}
@@ -314,9 +361,6 @@ export function App() {
         </section>
       </main>
 
-      <footer className="foot">
-        MIT licensed. Training runs in a Web Worker in your browser; nothing leaves the page.
-      </footer>
     </div>
   );
 }

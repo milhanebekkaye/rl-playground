@@ -11,6 +11,8 @@ interface Props {
   index: number;
   /** 'value': heatmap of max Q. 'td': heatmap of running mean |TD error|. */
   view: 'value' | 'td';
+  /** Cell outlined by the Bellman inspector, if any. */
+  selected: number | null;
   showNumbers: boolean;
   showTrail: boolean;
   onPaint: (x: number, y: number) => void;
@@ -33,11 +35,11 @@ function drawArrow(ctx: CanvasRenderingContext2D, cx: number, cy: number, dir: r
   ctx.stroke();
 }
 
-export function GridCanvas({ spec, live, index, view, showNumbers, showTrail, onPaint }: Props) {
+export function GridCanvas({ spec, live, index, view, selected, showNumbers, showTrail, onPaint }: Props) {
   const specRef = useRef(spec);
   specRef.current = spec;
-  const opts = useRef({ showNumbers, showTrail, view, index });
-  opts.current = { showNumbers, showTrail, view, index };
+  const opts = useRef({ showNumbers, showTrail, view, index, selected });
+  opts.current = { showNumbers, showTrail, view, index, selected };
   const painting = useRef(false);
 
   const draw = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
@@ -162,6 +164,13 @@ export function GridCanvas({ spec, live, index, view, showNumbers, showTrail, on
     for (let i = 0; i <= width; i++) { ctx.moveTo(Math.round(i * cs) + 0.5, 0); ctx.lineTo(Math.round(i * cs) + 0.5, h); }
     for (let j = 0; j <= height; j++) { ctx.moveTo(0, Math.round(j * cs) + 0.5); ctx.lineTo(w, Math.round(j * cs) + 0.5); }
     ctx.stroke();
+
+    const sel = opts.current.selected;
+    if (sel !== null && sel >= 0 && sel < cells.length) {
+      ctx.strokeStyle = P.ink;
+      ctx.lineWidth = Math.max(2.5, cs * 0.07);
+      ctx.strokeRect((sel % width) * cs + 2, Math.floor(sel / width) * cs + 2, cs - 4, cs - 4);
+    }
 
     // Current-episode trail, older segments fainter, then the agent.
     const center = (s: number): [number, number] => [(s % width + 0.5) * cs, (Math.floor(s / width) + 0.5) * cs];

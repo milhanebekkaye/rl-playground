@@ -1,4 +1,5 @@
 /** Shared base for tabular TD-control agents: a Q-table plus epsilon-greedy action selection. */
+import { INSPECT_STRIDE, readInspect, type LastUpdate } from './inspect';
 import type { Rng } from './rng';
 
 export interface QParams {
@@ -10,6 +11,8 @@ export interface QParams {
 export class TabularAgent {
   /** Row-major Q-table: q[s * numActions + a]. Initialised to zero. */
   readonly q: Float64Array;
+  /** Bellman-inspector records, see inspect.ts. */
+  readonly inspect: Float64Array;
   params: QParams;
 
   constructor(
@@ -19,6 +22,7 @@ export class TabularAgent {
     protected readonly rng: Rng,
   ) {
     this.q = new Float64Array(numStates * numActions);
+    this.inspect = new Float64Array(numStates * numActions * INSPECT_STRIDE);
     this.params = { ...params };
   }
 
@@ -48,5 +52,32 @@ export class TabularAgent {
   selectAction(s: number): number {
     if (this.rng() < this.params.epsilon) return Math.floor(this.rng() * this.numActions);
     return this.greedyAction(s);
+  }
+
+  /** Number of real updates applied to (s, a). */
+  visits(s: number, a: number): number {
+    return readInspect(this.inspect, s, a, this.numActions).visits;
+  }
+
+  /** The most recent real update of (s, a), or null. */
+  lastUpdate(s: number, a: number): LastUpdate | null {
+    return readInspect(this.inspect, s, a, this.numActions).last;
+  }
+
+  /** Records a real update for the inspector. */
+  protected record(
+    s: number, a: number, reward: number, next: number, bootstrap: number,
+    tdError: number, terminal: boolean, qBefore: number,
+  ): void {
+    const o = (s * this.numActions + a) * INSPECT_STRIDE;
+    const i = this.inspect;
+    i[o] += 1;
+    i[o + 1] = reward;
+    i[o + 2] = next;
+    i[o + 3] = bootstrap;
+    i[o + 4] = tdError;
+    i[o + 5] = terminal ? 1 : 0;
+    i[o + 6] = qBefore;
+    i[o + 7] = this.params.gamma;
   }
 }

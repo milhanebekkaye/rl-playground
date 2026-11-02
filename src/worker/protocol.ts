@@ -4,11 +4,12 @@ import type { Algo, EpisodeRecord, TdBatch } from '../core/trainer';
 
 export type ToWorker =
   /** One trainer per entry in `algos`; all share the spec, params and seed. */
-  | { type: 'init'; gen: number; spec: EnvSpec; params: QParams; seed: number; algos: Algo[] }
+  | { type: 'init'; gen: number; spec: EnvSpec; params: QParams; seed: number; algos: Algo[]; planning: number }
   | { type: 'play' }
   | { type: 'pause' }
   | { type: 'step' }
   | { type: 'params'; params: QParams }
+  | { type: 'planning'; n: number }
   | { type: 'speed'; stepsPerSecond: number };
 
 export interface AgentSnapshot {
@@ -17,6 +18,8 @@ export interface AgentSnapshot {
   q: Float32Array;
   /** Per-cell running mean of |TD error|. */
   tdMean: Float32Array;
+  /** Bellman-inspector records (see core/inspect.ts). */
+  inspect: Float32Array;
   /** Agent's current state and the states visited in the current episode. */
   state: number;
   trail: number[];
